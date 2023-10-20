@@ -1,0 +1,454 @@
+#输入为128bit(01二进制串)  ['01100011011010000110111101101110', '01100111011110010110000101101110', '01101001011100110111100101111001', '01100100011100110000000000000000']
+#1.转成10进制储存的4*4矩阵(每个位置放8个bit)
+import numpy as np
+import base64 
+
+Subchart = [0x63,0x7c,0x77,0x7b,0xf2,0x6b,0x6f,0xc5,0x30,0x01,0x67,0x2b,0xfe,0xd7,0xab,0x76,
+		        0xca,0x82,0xc9,0x7d,0xfa,0x59,0x47,0xf0,0xad,0xd4,0xa2,0xaf,0x9c,0xa4,0x72,0xc0,
+		        0xb7,0xfd,0x93,0x26,0x36,0x3f,0xf7,0xcc,0x34,0xa5,0xe5,0xf1,0x71,0xd8,0x31,0x15,
+		        0x04,0xc7,0x23,0xc3,0x18,0x96,0x05,0x9a,0x07,0x12,0x80,0xe2,0xeb,0x27,0xb2,0x75,
+		        0x09,0x83,0x2c,0x1a,0x1b,0x6e,0x5a,0xa0,0x52,0x3b,0xd6,0xb3,0x29,0xe3,0x2f,0x84,
+		        0x53,0xd1,0x00,0xed,0x20,0xfc,0xb1,0x5b,0x6a,0xcb,0xbe,0x39,0x4a,0x4c,0x58,0xcf,
+		        0xd0,0xef,0xaa,0xfb,0x43,0x4d,0x33,0x85,0x45,0xf9,0x02,0x7f,0x50,0x3c,0x9f,0xa8,
+		        0x51,0xa3,0x40,0x8f,0x92,0x9d,0x38,0xf5,0xbc,0xb6,0xda,0x21,0x10,0xff,0xf3,0xd2,
+		        0xcd,0x0c,0x13,0xec,0x5f,0x97,0x44,0x17,0xc4,0xa7,0x7e,0x3d,0x64,0x5d,0x19,0x73,
+		        0x60,0x81,0x4f,0xdc,0x22,0x2a,0x90,0x88,0x46,0xee,0xb8,0x14,0xde,0x5e,0x0b,0xdb,
+		        0xe0,0x32,0x3a,0x0a,0x49,0x06,0x24,0x5c,0xc2,0xd3,0xac,0x62,0x91,0x95,0xe4,0x79,
+		        0xe7,0xc8,0x37,0x6d,0x8d,0xd5,0x4e,0xa9,0x6c,0x56,0xf4,0xea,0x65,0x7a,0xae,0x08,
+		        0xba,0x78,0x25,0x2e,0x1c,0xa6,0xb4,0xc6,0xe8,0xdd,0x74,0x1f,0x4b,0xbd,0x8b,0x8a,
+		        0x70,0x3e,0xb5,0x66,0x48,0x03,0xf6,0x0e,0x61,0x35,0x57,0xb9,0x86,0xc1,0x1d,0x9e,
+		        0xe1,0xf8,0x98,0x11,0x69,0xd9,0x8e,0x94,0x9b,0x1e,0x87,0xe9,0xce,0x55,0x28,0xdf,
+		        0x8c,0xa1,0x89,0x0d,0xbf,0xe6,0x42,0x68,0x41,0x99,0x2d,0x0f,0xb0,0x54,0xbb,0x16]
+
+def StreamListToMix(SL):
+	mix=np.zeros((4,4),dtype=int)
+	for i in range(4):
+		tmp=SL[i]
+		for j in range(4):
+			mix[j][i]=int(tmp[8*j:8*j+8],2)
+
+	return mix
+
+'''
+StreamListToMix(SL) 的返回值形如
+[[251 133 249  67]
+ [ 69 182 143 143]
+ [168 239 182  99]
+ [159 159 182  99]]
+'''
+
+def SubByte(mix):
+	#字节替换
+
+
+	for i in range(4):
+		for j in range(4):
+			tmp=bin(mix[i][j])[2:].zfill(8)  #tmp=01100011(格式)
+			x=int(tmp[:4],2)  #行数 6
+			y=int(tmp[4:],2)  #列数 3
+			mix[i][j]=Subchart[16*x+y] #查表替换 0xfb,但会自动保存为10进制 251
+
+	return mix
+'''
+SubByte(mix)的返回值形如
+[[251 133 249  67]
+ [ 69 182 143 143]
+ [168 239 182  99]
+ [159 159 182  99]]
+'''
+
+def RotHang(mix):
+	#行位移
+	res_mix=np.zeros((4,4),dtype=int)
+	res_mix[0]=mix[0]
+	res_mix[1]=np.roll(mix[1],-1)
+	res_mix[2]=np.roll(mix[2],-2)
+	res_mix[3]=np.roll(mix[3],-3)
+
+	return res_mix
+
+'''
+RotHang(mix)的返回值形如
+[[251 133 249  67]
+ [182 143 143  69]
+ [182  99 168 239]
+ [ 99 159 159 182]]
+'''
+
+def mul(a,b):
+	if a==0x01:
+		return b         #乘上上1，值不变
+	elif a==0x02:
+		if b&128!=128:
+			return b<<1
+		else:
+			tmp=(b<<1)-256
+			return tmp^0x1b    #与上10000000，判断最高位是否为1，不为1直接左移一位
+	elif a==0x03:
+		return mul(0x02,b)^b
+	elif a==0x09:
+		return mul(0x02,mul(0x02,mul(0x02,b)))^b
+	elif a==0x0b:
+		return mul(0x09,b)^mul(0x02,b)
+	elif a==0x0d:
+		return mul(0x02,mul(0x02,mul(0x02,b)))^mul(0x02,mul(0x02,b))^b
+	elif a==0x0e:
+		return mul(0x0d,b)^mul(0x03,b)
+
+
+def ColMix(mix):
+#列混淆
+	CM_B=[[0x02, 0x03, 0x01, 0x01],
+		[0x01, 0x02, 0x03, 0x01],
+		[0x01, 0x01, 0x02, 0x03],
+		[0x03, 0x01, 0x01, 0x02]]
+
+	z_array=np.zeros((4,4),dtype=int)
+	for j in range(4):
+		for q in range(4):
+			for k in range(4):
+				z_array[j][q]^=mul(CM_B[j][k],mix[k][q])
+
+	#print(z_array)
+	return z_array
+
+'''
+ColMix(mix)的返回值形如
+[[ 21 160  99  12]
+ [ 13  71 139 128]
+ [ 79  76 192 175]
+ [222 232  94 239]]
+'''
+
+
+
+def RoundKeyAdd(mix_m,mix_k):
+	res_mix=mix_m^mix_k
+	return res_mix
+
+
+def T_SubByte(s):
+	#字节替换
+
+	a=[] #放置代换后的四个字节对应的16进制
+	#b=[] #放置代换后的四个字节对应的2进制
+	#print('s:%s'%s)
+	for i in range(4):
+		tmp=s[i*8:i*8+8]
+		#print(tmp)
+		x=int(tmp[:4],2)  
+		#print('0b'+tmp[4:])
+		y=int(tmp[4:],2)  #2进制转10进制得到行列数 1100001011111011011111100
+		#print(y)
+		#b.append(bin(int(Subchart[x*16+y]))[2:].zfill(8))  #2进制(不加0b)
+		a.append(Subchart[x*16+y])          #16进制(加0x) X  其实储存为10进制了
+
+	#print(a)
+
+	return a
+
+def RotByte(word):
+	#字循环： 循环左移一个字节
+	return word[8:16]+word[16:24]+word[24:32]+word[0:8]
+
+def T(w,j): #w为上一组128bit密钥的最后一个字，j为轮次
+	#T函数
+	Rcon=[0x01,0x02,0x04,0x08,0x10,   #轮常量
+		  0x20,0x40,0x80,0x1b,0x36]
+
+	#第一步：字循环
+	tmp=RotByte(w)
+	#print(tmp)
+
+	#第二步字节代换
+	tmp_2=T_SubByte(tmp)
+	#print(tmp_2)
+	#第三步轮密钥异或
+	tmp_3=tmp_2[0]^Rcon[j]
+	tmp_2[0]=tmp_3   #tmp_2 形如 [17, 68, 41, 219]
+
+	Result=''        #将tmp_2转成2进制串
+
+	for i in range(4):
+		b_2=bin(tmp_2[i])[2:].zfill(8)
+		Result=Result+b_2        
+
+	return Result
+
+def WordExp(key):
+#密钥拓展
+	Words=[]
+	Words.append(key)
+
+	#print(Words)
+	for i in range(10):
+		word=[]
+		tmp=T(Words[i][3],i)
+		#print(tmp)
+		tmp=eval('0b'+Words[i][0])^eval('0b'+tmp)
+		word.append(tmp)
+		for j in range(3):
+			word.append(word[j]^eval('0b'+Words[i][j+1]))
+		#print(word)
+		for s in range(4):
+			word[s]=bin(word[s])[2:].zfill(32)
+			
+		Words.append(word)
+	
+	return Words
+
+def encrypt(message,key):
+	mix=message
+	#mix=StreamListToMix(message)
+	Words=WordExp(key)
+
+	#轮密钥加
+	w_mix_1=StreamListToMix(Words[0])
+	Result_1=RoundKeyAdd(mix,w_mix_1)
+	for i in range(9):
+		#字节代换
+		#print(Result_1)
+		Result_2=SubByte(Result_1)
+		#行位移
+		Result_2=RotHang(Result_2)
+		#print(Result_2)
+		#列混淆
+		Result_2=ColMix(Result_2)
+		#print(Result_2)
+		#轮密钥加
+		w_mix_i=StreamListToMix(Words[i+1])
+		Result_1=RoundKeyAdd(Result_2,w_mix_i)
+		#print(Result_1)
+	#第10轮
+	w_mix_11=StreamListToMix(Words[10])
+	#字节代换
+	Result_2=SubByte(Result_1)
+	#行位移
+	Result_2=RotHang(Result_2)
+	#print(Result_2)
+	#轮密钥加
+	Result_1=RoundKeyAdd(Result_2,w_mix_11)
+
+
+	return Result_1
+
+def ReSubByte(mix):
+	#逆字节替换
+	ReSubchart = [0x52, 0x09, 0x6a, 0xd5, 0x30, 0x36, 0xa5, 0x38, 0xbf, 0x40, 0xa3, 0x9e, 0x81, 0xf3, 0xd7,0xfb,
+				0x7c, 0xe3, 0x39, 0x82, 0x9b, 0x2f, 0xff, 0x87, 0x34, 0x8e, 0x43, 0x44, 0xc4, 0xde, 0xe9,0xcb,
+				0x54, 0x7b, 0x94, 0x32, 0xa6, 0xc2, 0x23, 0x3d, 0xee, 0x4c, 0x95, 0x0b, 0x42, 0xfa, 0xc3,0x4e,
+				0x08, 0x2e, 0xa1, 0x66, 0x28, 0xd9, 0x24, 0xb2, 0x76, 0x5b, 0xa2, 0x49, 0x6d, 0x8b, 0xd1,0x25,
+				0x72, 0xf8, 0xf6, 0x64, 0x86, 0x68, 0x98, 0x16, 0xd4, 0xa4, 0x5c, 0xcc, 0x5d, 0x65, 0xb6,0x92,
+				0x6c, 0x70, 0x48, 0x50, 0xfd, 0xed, 0xb9, 0xda, 0x5e, 0x15, 0x46, 0x57, 0xa7, 0x8d, 0x9d,0x84,
+				0x90, 0xd8, 0xab, 0x00, 0x8c, 0xbc, 0xd3, 0x0a, 0xf7, 0xe4, 0x58, 0x05, 0xb8, 0xb3, 0x45,0x06,
+				0xd0, 0x2c, 0x1e, 0x8f, 0xca, 0x3f, 0x0f, 0x02, 0xc1, 0xaf, 0xbd, 0x03, 0x01, 0x13, 0x8a,0x6b,
+				0x3a, 0x91, 0x11, 0x41, 0x4f, 0x67, 0xdc, 0xea, 0x97, 0xf2, 0xcf, 0xce, 0xf0, 0xb4, 0xe6,0x73,
+				0x96, 0xac, 0x74, 0x22, 0xe7, 0xad, 0x35, 0x85, 0xe2, 0xf9, 0x37, 0xe8, 0x1c, 0x75, 0xdf,0x6e,
+				0x47, 0xf1, 0x1a, 0x71, 0x1d, 0x29, 0xc5, 0x89, 0x6f, 0xb7, 0x62, 0x0e, 0xaa, 0x18, 0xbe,0x1b,
+				0xfc, 0x56, 0x3e, 0x4b, 0xc6, 0xd2, 0x79, 0x20, 0x9a, 0xdb, 0xc0, 0xfe, 0x78, 0xcd, 0x5a,0xf4,
+				0x1f, 0xdd, 0xa8, 0x33, 0x88, 0x07, 0xc7, 0x31, 0xb1, 0x12, 0x10, 0x59, 0x27, 0x80, 0xec,0x5f,
+				0x60, 0x51, 0x7f, 0xa9, 0x19, 0xb5, 0x4a, 0x0d, 0x2d, 0xe5, 0x7a, 0x9f, 0x93, 0xc9, 0x9c,0xef,
+				0xa0, 0xe0, 0x3b, 0x4d, 0xae, 0x2a, 0xf5, 0xb0, 0xc8, 0xeb, 0xbb, 0x3c, 0x83, 0x53, 0x99,0x61,
+				0x17, 0x2b, 0x04, 0x7e, 0xba, 0x77, 0xd6, 0x26, 0xe1, 0x69, 0x14, 0x63, 0x55, 0x21, 0x0c,0x7d]
+
+	for i in range(4):
+		for j in range(4):
+			tmp=bin(mix[i][j])[2:].zfill(8)  #tmp=01100011(格式)
+			x=int(tmp[:4],2)  #行数 6
+			y=int(tmp[4:],2)  #列数 3
+			mix[i][j]=ReSubchart[16*x+y] #查表替换 0xfb,但会自动保存为10进制 251
+
+	
+	return mix
+
+def ReRotHang(mix):
+	#逆行位移
+	res_mix=np.zeros((4,4),dtype=int)
+	res_mix[0]=mix[0]
+	res_mix[1]=np.roll(mix[1],1)
+	res_mix[2]=np.roll(mix[2],2)
+	res_mix[3]=np.roll(mix[3],3)
+
+	return res_mix
+
+def ReColMix(mix):
+#列混淆
+	CM_B=[[0x0e, 0x0b, 0x0d, 0x09],
+		[0x09, 0x0e, 0x0b, 0x0d],
+		[0x0d, 0x09, 0x0e, 0x0b],
+		[0x0b, 0x0d, 0x09, 0x0e]]
+
+	z_array=np.zeros((4,4),dtype=int)
+	for j in range(4):
+		for q in range(4):
+			for k in range(4):
+				z_array[j][q]^=mul(CM_B[j][k],mix[k][q])
+
+	'''mix_2=''
+				for i in range(4):
+					for j in range(4):
+						mix_2=mix_2+str(hex(z_array[j][i]))
+				print(mix_2)'''
+
+	return z_array
+
+
+def decrypt(message,key):
+	#mix=StreamListToMix(message)
+	mix=message
+	Words=WordExp(key)
+	Words.reverse()
+	#print(Words)
+	#轮密钥加
+	w_mix_1=StreamListToMix(Words[0])
+	Result_1=RoundKeyAdd(mix,w_mix_1)
+	for i in range(9):
+		#字节代换
+		#print(Result_1)
+		Result_2=ReSubByte(Result_1)
+		#行位移
+		Result_2=ReRotHang(Result_2)
+		#print(Result_2)
+		
+		#列混淆
+		Result_2=ReColMix(Result_2)
+		#print(Result_2)
+		#轮密钥加
+		w_mix_i=ReColMix(StreamListToMix(Words[i+1]))
+		#print(w_mix_i)
+		Result_1=RoundKeyAdd(Result_2,w_mix_i)
+		#print(Result_1)
+	#第10轮
+	w_mix_11=StreamListToMix(Words[10])
+	#字节代换
+	Result_2=ReSubByte(Result_1)
+	#行位移
+	Result_2=ReRotHang(Result_2)
+	#print(Result_2)
+	#轮密钥加
+	Result_1=RoundKeyAdd(Result_2,w_mix_11)
+
+
+	return Result_1
+
+def MixToHexStream(mix):  #返回128bit的16进制流
+	HS=''
+	for i in range(4):
+		for j in range(4):
+			HS+=hex(mix[j][i])[2:]
+
+	return HS
+
+def MixToStr(mix): #返回128bit的字符串
+	res_str=''
+	for i in range(4):
+		for j in range(4):
+			res_str+=chr(mix[j][i])
+
+	return res_str
+
+def StrToBase64(str1):
+	b = base64.b64encode(str1.encode('latin')).decode('latin')
+	return b
+
+def Base64ToStr(b):
+	c = base64.b64decode(b.encode('latin')).decode("latin")
+	return c
+
+def HexStreamToBinList(HS):
+	P=[]
+	num_2=''
+	for s in HS:
+		b=bin(int(s,16))[2:].zfill(4)
+		num_2+=b
+
+	while len(num_2) % 128 != 0:
+		num_2 += '0'                      #不够填充0
+	#print(num_2)
+	for i in range(len(num_2)//32):     #按照32bit分组
+		P.append(num_2[i*32:i*32+32])
+	return P
+
+def Str2ToBinList(string):
+	P=[]
+	num_2=''
+	for s in string:
+		num_10=s
+		num_2=num_2+bin(num_10)[2:].zfill(8) #zfill方法可以指定字符串位数，前面用0填充
+
+	#print(num_2)
+	while len(num_2) % 128 != 0:
+		num_2 += '0'                      #不够填充0
+	#print(num_2)
+	for i in range(len(num_2)//32):     #按照32bit分组
+		P.append(num_2[i*32:i*32+32])
+
+	return P
+
+def delnullbyte(tmp):
+	#index=0
+	for i in range(len(tmp)-1,0,-1):
+		if ord(tmp[i])!=0x00:
+			return(tmp[:i+1])
+	
+
+
+def StrToBinList(string): #将ASCII字符转位二进制分组流
+	P=[]
+	num_2=''
+	for s in string:
+		num_10=ord(s)
+		num_2=num_2+bin(num_10)[2:].zfill(8) #zfill方法可以指定字符串位数，前面用0填充
+
+	#print(num_2)
+	while len(num_2) % 128 != 0:
+		num_2 += '0'                      #不够填充0
+	#print(num_2)
+	for i in range(len(num_2)//32):     #按照32bit分组
+		P.append(num_2[i*32:i*32+32])
+
+	return P
+
+def main():
+	#message=HexStreamToBinList('00112233445566778899aabbccddeeff')
+	#key=HexStreamToBinList('2b7e151628aed2a6abf7158809cf4f3c')
+	#print(message)
+	#print(key)
+	message=['01100011011010000110111101101110', '01100111011110010110000101101110', '01101001011100110111100101111001', '01100100011100110000000000000000']
+	key=['11101000111010001100110100110100', '01101000100010011111100000011111', '10010000000101010100101100110000', '10011111111000111000011001001100']
+	#mix=StreamListToMix(message)
+	#key_mix=StreamListToMix(key)
+	#print(mix)
+	#sub_mix=SubByte(mix)
+	#print(sub_mix)
+	#rot_mix=RotHang(sub_mix)
+	#print(rot_mix)
+	#col_mix=ColMix(mix)
+	#print(col_mix)
+	#print(WordExp(key))
+	c=encrypt(StreamListToMix(message),key)
+	#print(MixToStr(c))#ôéªÅÇW:'ØÐUÖäÖK
+	#print(MixToHexStream(c))
+	#print(StrToBase64(MixToStr(c)))
+	#print(c)
+	#c=mix(c)
+	#p=decrypt(c,key)
+	#x=MixToStr(p)
+	#print(delnullbyte(x))
+
+
+'''
+encrypt(message,key)
+[[ 37 116  19 127]
+ [223  19  60 168]
+ [210  41   2 236]
+ [151 238 108 192]]
+'''
+
+
+if __name__ == '__main__':
+	main()
+
+
+
+

@@ -1,0 +1,40 @@
+#!/bin/bash
+#Use: mysql按天自动备份脚本
+#Author: wl_it
+#Date: 2020.05.06
+
+#备份目录
+BAK_DIR=/data/backup/`date +%Y%m%d`
+#数据库名称
+MYSQL_DB=study_cloudalibaba_db
+#备份专用数据库登陆名
+MYSQL_USER=backup
+#备份专用数据库登陆密码
+MYSQL_PWD=123456
+#Mysql备份命令
+MYSQL_CMD=/usr/bin/mysqldump
+
+#该脚本必须以root用户执行
+if [ $UID -ne 0 ];then
+        echo "该脚本必须以root执行"
+        exit
+fi
+
+#如果备份目录不存在则创建
+if [ ! -d $BAK_DIR ];then
+        mkdir -p $BAK_DIR
+        echo -e "\033[32m备份目录$BAK_DIR创建成功\033[0m"
+else
+        echo "备份目录$BAK_DIR已存在"
+fi
+
+#执行Mysql备份命令
+$MYSQL_CMD -u$MYSQL_USER -p$MYSQL_PWD -d $MYSQL_DB --skip-lock-tables > $BAK_DIR/$MYSQL_DB.sql
+
+#判断上面的备份命令是否成功
+if [ $? -eq 0 ];then
+        echo -e "\033[32m备份$MYSQL_DB成功\033[0m"
+else
+        echo -e "\033[31m备份$MYSQL_DB失败，请检查\033[0m"    #31m表示输出红色前景色
+fi
+

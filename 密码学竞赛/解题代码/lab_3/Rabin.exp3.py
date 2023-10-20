@@ -1,0 +1,23 @@
+import gmpy2
+from Crypto.Util.number import long_to_bytes
+p= 191347168846916878141578001303655055683981070975868056032490785392900806784727
+q= 219673873853765612669813661096032565978134844881522541118068777157179360691471
+c= 994772772317512037785187803773696380558134918614351250855785624718258501242901981846337801266369414061152226881009458849215835578985342658608537003662606
+n=p*q
+c1=pow(c,(p+1)//4,p)
+c2=p-c1
+c3=pow(c,(q+1)//4,q)
+c4=q-c3
+
+p_inv=gmpy2.invert(p,q)
+q_inv=gmpy2.invert(q,p)
+
+res1=(c1*q*q_inv+c3*p*p_inv)%n
+res2=(c1*q*q_inv+c4*p*p_inv)%n
+res3=(c2*q*q_inv+c3*p*p_inv)%n
+res4=(c2*q*q_inv+c4*p*p_inv)%n
+
+print(long_to_bytes(res1))
+print(long_to_bytes(res2))
+print(long_to_bytes(res3))
+print(long_to_bytes(res4))

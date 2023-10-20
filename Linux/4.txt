@@ -1,0 +1,44 @@
+#!/bin/bash
+#定义封IP方法
+function ban_ip()
+{
+    t=`date -d "-1 min" +%Y:%H:%M`
+    log=/var/log/httpd/access_log
+    #当IP前一分钟请求数大于100,记录到临时文件
+    egrep "$t:[0-9]+" $log|awk '{print $1}'|sort -n|uniq -c|sort -n|awk '$1>100 {print $2}' >/tmp/ban_ip.list
+    #当记录IP的临时文件不为空时，开始封IP
+    ban_n=`wc -l /tmp/ban_ip.list|awk '{print $1}'`
+    if [ $ban_n -ne 0 ]
+    then
+	for ip in `cat /tmp/ban_ip.list`
+	do
+	  iptables -I INPUT -s $ip -j REJECT
+	done
+    fi
+}
+#定义解封IP的方法
+function allow_ip()
+{
+    #将发送数据包小于5的被封IP记录到临时文件
+    iptables -nvL INPUT|sed '1d'|awk '$1<5 {print $8}' >/tmp/allow_ip.list
+    #当临时文件不为空时,开始解封IP
+    allow_n=`wc -l /tmp/allow_ip.list|awk '{print $1}'`
+    if [ $allow_n -ne 0 ]
+    then
+	for ip in `cat /tmp/allow_ip.list` 
+	do
+	  iptables -D INPUT -s $ip -j REJECT
+	done
+    fi
+    #清空iptables计数器(记录数据包那一列的值将被清零)
+    iptables -Z
+}
+#执行封IP操作,但每半小时才执行一次解封IP操作
+d=`date +%M`
+if [ $d == "00" ]||[ $d == "30" ]
+then
+    allow_ip
+    ban_ip
+else
+    ban_ip
+fi
